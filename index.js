@@ -64,32 +64,63 @@ io.on("connection", (socket) => {
     }
   });
 
+
   socket.on("send", async (message) => {
-    try {
-      const payload = {
-        room: message.room || "global",
-        sender: message.sender || "anonymous",
-        text: message.text || message.message || "",
-        timestamp: message.timestamp ? new Date(message.timestamp) : new Date(),
-        meta: message.meta || {}
-      };
+  try {
+    const payload = {
+      room: message.room || "global",
+      sender: message.sender || "anonymous",
+      text: message.text || message.message || "",
+      timestamp: message.timestamp ? new Date(message.timestamp) : new Date(),
+      meta: message.meta || {}
+    };
 
-      const redisKey = `messages:${payload.room}`;
-      const serialized = JSON.stringify({
-        ...payload,
-        timestamp: payload.timestamp.toISOString()
-      });
+    // ✅ Ensure the socket is in the room before broadcasting
+    socket.join(payload.room);
 
-      await redisClient.rPush(redisKey, serialized);
-      await redisClient.expire(redisKey, MESSAGE_TTL_SECONDS);
+    const redisKey = `messages:${payload.room}`;
+    const serialized = JSON.stringify({
+      ...payload,
+      timestamp: payload.timestamp.toISOString()
+    });
 
-      console.log("saved message to redis", payload);
-      socket.to(payload.room).emit("message", payload);
-    } catch (error) {
-      console.error("Failed to save message to Redis:", error);
-      socket.emit("error", { message: "Unable to save message." });
-    }
-  });
+    await redisClient.rPush(redisKey, serialized);
+    await redisClient.expire(redisKey, MESSAGE_TTL_SECONDS);
+
+    console.log("saved message to redis", payload);
+    socket.to(payload.room).emit("message", payload);
+  } catch (error) {
+    console.error("Failed to save message to Redis:", error);
+    socket.emit("error", { message: "Unable to save message." });
+  }
+});
+
+  // socket.on("send", async (message) => {
+  //   try {
+  //     const payload = {
+  //       room: message.room || "global",
+  //       sender: message.sender || "anonymous",
+  //       text: message.text || message.message || "",
+  //       timestamp: message.timestamp ? new Date(message.timestamp) : new Date(),
+  //       meta: message.meta || {}
+  //     };
+
+  //     const redisKey = `messages:${payload.room}`;
+  //     const serialized = JSON.stringify({
+  //       ...payload,
+  //       timestamp: payload.timestamp.toISOString()
+  //     });
+
+  //     await redisClient.rPush(redisKey, serialized);
+  //     await redisClient.expire(redisKey, MESSAGE_TTL_SECONDS);
+
+  //     console.log("saved message to redis", payload);
+  //     socket.to(payload.room).emit("message", payload);
+  //   } catch (error) {
+  //     console.error("Failed to save message to Redis:", error);
+  //     socket.emit("error", { message: "Unable to save message." });
+  //   }
+  // });
 });
 
 cron.schedule("*/1 * * * *", async () => {
